@@ -5,7 +5,8 @@ python-dotenv>=1.0.1
 gunicorn>=21.0.0  # For deployment later
 
 # --- Data Validation / Models ---
-pydantic>=2.5.0,<3.0.0  # Version compatible with Python 3.11/3.12
+# Version compatible with Python 3.11/3.12
+pydantic[email]>=2.5.0,<3.0.0 
 
 # --- LlamaIndex Core ---
 # Specify a recent stable core version. Integrations will align.
@@ -23,7 +24,8 @@ sentence-transformers>=2.6.0  # For local embeddings
 torch>=2.0.0  # Dependency for sentence-transformers
 faiss-cpu>=1.7.0  # FAISS engine
 neo4j>=5.10.0  # Neo4j Python driver
-numpy>=1.24.0  # Often needed by faiss/embeddings
+numpy>=1.24.0,<2.0 # Often needed by faiss/embeddings
+email-validator>=1.1 # Dependency for pydantic[email]
 
 # --- Firebase / Google Cloud ---
 firebase-admin>=6.3.0
