@@ -36,3 +36,4 @@ PyJWT>=2.8.0
 
 # --- Optional Utilities ---
 requests>=2.31.0  # Not strictly needed by backend itself
+googlemaps>=4.2.0  # If using Google Maps API in backend

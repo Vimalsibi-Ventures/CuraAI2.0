@@ -29,7 +29,9 @@ def create_app():
     app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'default_jwt_secret_key_change_me')
 
     # Enable CORS
-    CORS(app, resources={r"/api/*": {"origins": "*"}}) # Allow all origins for /api/ routes
+    # CORS(app, resources={r"/api/*": {"origins": "*"}}) # 👈 This was too specific and failed the preflight
+    CORS(app) # 👈 NEW: Apply a default, wide-open CORS policy to the entire app.
+    logger.info("Applied wide-open CORS policy to the app.")
 
     # -----------------------------
     # Load RAG engines (FAISS + KG)
@@ -87,5 +89,17 @@ def create_app():
     except Exception as e:
          logger.error(f"Error registering chat blueprint: {e}", exc_info=True)
 
+    # --- NEW: Register the Misc (Location) Blueprint ---
+    try:
+        from app.routes_misc import misc_bp
+        app.register_blueprint(misc_bp)
+        logger.info("Misc blueprint (for location) registered successfully.")
+    except ImportError as e:
+        logger.error(f"Misc blueprint FAILED to load (routes_misc.py missing or error): {e}", exc_info=True)
+    except Exception as e:
+         logger.error(f"Error registering misc blueprint: {e}", exc_info=True)
+    # --- End New Code ---
+
     logger.info("Flask app instance creation complete.")
     return app
+

@@ -7,6 +7,7 @@ from typing import List, Optional, Literal
 # -----------------------------
 # User Authentication Models
 # -----------------------------
+# (These are untouched)
 
 class UserSignup(BaseModel):
     email: EmailStr = Field(..., description="User's email address")
@@ -28,6 +29,7 @@ class AuthResponse(BaseModel):
 # -----------------------------
 # Chat Models
 # -----------------------------
+# (These are untouched)
 
 class ChatMessage(BaseModel):
     role: Literal['user', 'assistant'] = Field(..., description="Message author (user or assistant)")
@@ -53,22 +55,26 @@ class ChatResponse(BaseModel):
 
 
 # -----------------------------
-# Report Models
+# Report Models (CHANGED)
 # -----------------------------
 
 class ReportRequest(BaseModel):
-    session_id: str = Field(..., description="Session ID for which report is requested")
+    # session_id: str = Field(..., description="Session ID for which report is requested") # 👈 GUTTED
+    history: List[ChatMessage] = Field(..., description="Full chat history to generate report from") # 👈 NEW
 
 
 class ReportResponse(BaseModel):
-    summary: str = Field(..., description="Summarized report text")
-    triage: str = Field(..., description="Triage analysis or classification")
-    prep: str = Field(..., description="Preparation or next-step guidance")
+    # summary: str = Field(..., description="Summarized report text") # 👈 GUTTED
+    # triage: str = Field(..., description="Triage analysis or classification") # 👈 GUTTED
+    # prep: str = Field(..., description="Preparation or next-step guidance") # 👈 GUTTED
+    disease_list: List[str] = Field(..., description="List of possible diseases") # 👈 NEW
+    question_list: List[str] = Field(..., description="List of questions for the doctor") # 👈 NEW
 
 
 # -----------------------------
 # RAG (Retrieval-Augmented Generation) Models
 # -----------------------------
+# (These are untouched)
 
 class RAGRequest(BaseModel):
     user_question: str = Field(..., description="User's question for RAG engine")
