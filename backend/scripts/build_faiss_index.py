@@ -21,8 +21,11 @@ logger = logging.getLogger(__name__)
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent.parent
 INPUT_DIR = PROJECT_ROOT / "backend" / "data"
-OUTPUT_DIR = PROJECT_ROOT / "backend" / "storage" / "faiss_llamaindex_storage"
+# Save outputs directly into backend/storage (individual files)
+OUTPUT_DIR = PROJECT_ROOT / "backend" / "storage"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+FAISS_INDEX_FILE = OUTPUT_DIR / "vector_index.faiss" # Raw FAISS binary index
+DOC_METADATA_FILE = OUTPUT_DIR / "vector_metadata.json" # Our simple metadata map
 
 # --- Embedding Model Setup (LOCAL MODEL FOR BUILD SCRIPT) ---
 try:
@@ -34,15 +37,15 @@ except Exception as e:
     logger.error(f"Failed to initialize local embedding model: {e}", exc_info=True)
     raise SystemExit("Embedding model configuration failed.")
 
-# --- Helper functions ---
+# --- Helper functions (normalize_id, load_json_data remain the same) ---
 def normalize_id(text, prefix):
-    # Ensure this EXACTLY matches the function used in enrich_neo4j_ids.py
-    original_text = str(text)
+    # (Keep the same robust normalize_id function from previous versions)
+    original_text = str(text) # Keep original for fallback
     text = str(text).strip().lower()
-    text = re.sub(r'\s*\(.*\)\s*', '', text)
-    text = re.sub(r'[^\w\s-]', '', text)
-    text = re.sub(r'\s+', '_', text)
-    text = text.strip('_')
+    text = re.sub(r'\s*\(.\)\s', '', text) # Remove content in parentheses
+    text = re.sub(r'[^\w\s-]', '', text) # Keep alphanumeric, spaces, hyphens
+    text = re.sub(r'\s+', '_', text) # Replace spaces with underscores
+    text = text.strip('_') # Remove leading/trailing underscores
     if not text:
         logger.warning(f"Generated empty ID for prefix '{prefix}' and original text '{original_text}'. Creating fallback ID.")
         fallback_hash = hashlib.md5(original_text.encode()).hexdigest()[:8]
@@ -50,169 +53,135 @@ def normalize_id(text, prefix):
     return f"{prefix}:{text}"
 
 def load_json_data(filename, entity_type, name_field):
+    # (Keep the same robust load_json_data function)
     path = INPUT_DIR / filename
     logger.info(f"Loading entity data from {path}...")
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        with open(path, "r", encoding="utf-8") as f: data = json.load(f)
         count = 0
-        # Check if data is a list, if not, maybe it's a single object? Adapt if needed.
-        if not isinstance(data, list):
-             logger.warning(f"Data in {filename} is not a list. Attempting to process as single object.")
-             data = [data] # Wrap in a list
-
+        if not isinstance(data, list): data = [data]
         for item in data:
-             # Ensure item is a dictionary before proceeding
             if isinstance(item, dict):
                 item["type"] = entity_type
-                item["original_name"] = item.get(name_field, "") # Store original name
+                item["original_name"] = item.get(name_field, "")
                 count += 1
-            else:
-                logger.warning(f"Skipping non-dictionary item in {filename}: {item}")
-
+            else: logger.warning(f"Skipping non-dictionary item in {filename}: {item}")
         logger.info(f"Loaded {count} items of type '{entity_type}'.")
         return data
-    except FileNotFoundError:
-        logger.error(f"Error: File not found at {path}")
-        return []
-    except json.JSONDecodeError:
-        logger.error(f"Error decoding JSON from {path}")
-        return []
-    except Exception as e:
-         logger.error(f"An unexpected error occurred loading {path}: {e}")
-         return []
+    except FileNotFoundError: logger.error(f"Error: File not found at {path}"); return []
+    except json.JSONDecodeError: logger.error(f"Error decoding JSON from {path}"); return []
+    except Exception as e: logger.error(f"An unexpected error occurred loading {path}: {e}"); return []
 
-# --- Chunking/Document Creation (Processes FAQs WITHIN entities) ---
+# --- Chunking/Document Creation (Function remains the same) ---
 def create_llama_documents(entities):
+    # (Keep the same robust create_llama_documents function creating LlamaIndex Document objects)
     documents = []
     logger.info(f"Creating LlamaIndex Documents from {len(entities)} entities...")
-    processed_count = 0
-    skipped_count = 0
-
+    processed_count = 0; skipped_count = 0
     for item in entities:
-        # Check if item is a dictionary
-        if not isinstance(item, dict):
-            logger.warning(f"Skipping non-dictionary entity: {item}")
-            skipped_count += 1
-            continue
-
-        original_name = item.get("original_name", "")
-        item_type = item.get("type", "unknown")
-
-        if not original_name:
-            logger.warning(f"Skipping item due to missing name/identifier: {item.get('url', 'Unknown URL')}")
-            skipped_count +=1
-            continue
-
+        if not isinstance(item, dict): skipped_count += 1; continue
+        original_name = item.get("original_name", ""); item_type = item.get("type", "unknown")
+        if not original_name: skipped_count +=1; continue
         try:
-            base_id = normalize_id(original_name, item_type)
-            url = item.get("url", "")
+            base_id = normalize_id(original_name, item_type); url = item.get("url", "")
             common_metadata = {'name': original_name, 'url': url, 'entity_type': item_type}
-
-            # Create Document for the Name itself
             name_id = base_id
-            documents.append(Document(
-                text=original_name,
-                doc_id=name_id,
-                metadata={**common_metadata, 'type': 'name', 'doc_id': name_id}
-            ))
-
-            # Create Documents for Text Fields
+            documents.append(Document(text=original_name, doc_id=name_id, metadata={**common_metadata, 'type': 'name', 'doc_id': name_id}))
             for field in ["overview", "symptoms", "causes", "treatments", "prevention", "risk_factors", "complications"]:
                 val = item.get(field)
                 if not val: continue
-                if isinstance(val, list): val = " ".join(filter(None, val)) # Join list items safely
-
-                # Ensure val is a string before regex
-                val_str = str(val)
-                cleaned_text = re.sub(r'\s+', ' ', val_str).strip()
-                # Basic cleaning (add more specific regex if needed)
+                if isinstance(val, list): val = " ".join(filter(None, val))
+                val_str = str(val); cleaned_text = re.sub(r'\s+', ' ', val_str).strip()
                 cleaned_text = re.sub(r'\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s+\w+\s+\d{1,2},\s+\d{4}\b', '', cleaned_text)
                 cleaned_text = re.sub(r'\b(?:Symptoms & causes|Diagnosis & treatment|Diseases & Conditions)\b', '', cleaned_text, flags=re.IGNORECASE)
-                cleaned_text = re.sub(r';\s*;*', '; ', cleaned_text).strip('; ')
-                cleaned_text = re.sub(r'\s+', ' ', cleaned_text).strip()
-
+                cleaned_text = re.sub(r';\s*;*', '; ', cleaned_text).strip('; '); cleaned_text = re.sub(r'\s+', ' ', cleaned_text).strip()
                 if cleaned_text:
-                    chunk_id = f"{base_id}:{field}"
-                    context_prefix = field.replace('_',' ').title() + ": "
-                    documents.append(Document(
-                        text=context_prefix + cleaned_text,
-                        doc_id=chunk_id,
-                        metadata={**common_metadata, 'type': field, 'doc_id': chunk_id}
-                    ))
-
-            # Create Documents for Entity-Specific FAQs (Handles FAQs inside diseases/tests/drugs)
+                    chunk_id = f"{base_id}:{field}"; context_prefix = field.replace('_',' ').title() + ": "
+                    documents.append(Document(text=context_prefix + cleaned_text, doc_id=chunk_id, metadata={**common_metadata, 'type': field, 'doc_id': chunk_id}))
             faqs = item.get("faqs", [])
-            if isinstance(faqs, list): # Ensure faqs is a list
+            if isinstance(faqs, list):
                 for i, faq in enumerate(faqs):
-                    # Ensure faq is a dictionary
                     if isinstance(faq, dict):
-                        q = faq.get("question", "").strip()
-                        a = faq.get("answer", "").strip()
+                        q = faq.get("question", "").strip(); a = faq.get("answer", "").strip()
                         if q and a:
-                            text = f"Question: {q} Answer: {a}"
-                            chunk_id = f"{base_id}:faq:{i}"
-                            documents.append(Document(
-                                text=text,
-                                doc_id=chunk_id,
-                                metadata={**common_metadata, 'type': 'faq', 'doc_id': chunk_id}
-                            ))
-                    else:
-                        logger.warning(f"Skipping non-dictionary FAQ item within '{original_name}': {faq}")
-            elif faqs: # Log if 'faqs' exists but isn't a list
-                 logger.warning(f"'faqs' field in '{original_name}' is not a list: {type(faqs)}")
-
-            processed_count += 1 # Count processed entity
-
-        except Exception as e:
-            logger.error(f"Error processing item '{original_name}': {e}", exc_info=True)
-            skipped_count += 1
-
+                            text = f"Question: {q} Answer: {a}"; chunk_id = f"{base_id}:faq:{i}"
+                            documents.append(Document(text=text, doc_id=chunk_id, metadata={**common_metadata, 'type': 'faq', 'doc_id': chunk_id}))
+                    else: logger.warning(f"Skipping non-dictionary FAQ item within '{original_name}': {faq}")
+            elif faqs: logger.warning(f"'faqs' field in '{original_name}' is not a list: {type(faqs)}")
+            processed_count += 1
+        except Exception as e: logger.error(f"Error processing item '{original_name}': {e}", exc_info=True); skipped_count += 1
     logger.info(f"Created {len(documents)} LlamaIndex Documents from {processed_count} entities. Skipped {skipped_count} items.")
     return documents
 
-# --- Build and Persist LlamaIndex (Function remains the same) ---
-def build_and_persist_llamaindex(documents, persist_dir=OUTPUT_DIR):
+# --- Build FAISS Index and Save Manually ---
+def build_and_save_manual(documents, index_path=FAISS_INDEX_FILE, metadata_path=DOC_METADATA_FILE):
     if not documents:
         logger.error("No documents provided to build index.")
         raise SystemExit("No documents generated for indexing.")
 
-    logger.info(f"Initializing FAISS vector store with expected dimension {EXPECTED_DIMENSION}...")
+    embed_model = Settings.embed_model # Get the globally set embed model
+    if not embed_model:
+        raise SystemExit("Embedding model not configured in LlamaIndex Settings.")
+
+    logger.info(f"Generating embeddings for {len(documents)} documents...")
+    texts_to_embed = [doc.get_content() for doc in documents]
+    # Generate embeddings in batches to potentially manage memory
+    embeddings = embed_model.get_text_embedding_batch(texts_to_embed, show_progress=True)
+    vectors = np.array(embeddings).astype("float32")
+
+    if vectors.shape[1] != EXPECTED_DIMENSION:
+        logger.error(f"Embedding dimension mismatch! Expected {EXPECTED_DIMENSION}, got {vectors.shape[1]}.")
+        raise SystemExit("Embedding dimension error.")
+
+    logger.info(f"Building FAISS index (IndexFlatL2)...")
     faiss_index = faiss.IndexFlatL2(EXPECTED_DIMENSION)
-    vector_store = FaissVectorStore(faiss_index=faiss_index)
-    storage_context = StorageContext.from_defaults(vector_store=vector_store)
+    # We need sequential integer IDs (0, 1, 2...) for FAISS IndexIDMap
+    faiss_ids = np.arange(len(vectors))
+    index_mapped = faiss.IndexIDMap(faiss_index)
+    index_mapped.add_with_ids(vectors, faiss_ids)
 
-    logger.info(f"Building VectorStoreIndex with {len(documents)} documents (using local embed model)...")
-    index = VectorStoreIndex.from_documents(
-        documents,
-        storage_context=storage_context,
-        show_progress=True#,
-        #embed_batch_size=16
-    )
+    logger.info(f"Saving FAISS index to {index_path}...")
+    faiss.write_index(index_mapped, str(index_path)) # Use faiss function
+    logger.info("FAISS index saved successfully.")
 
-    logger.info(f"Persisting index to directory: {persist_dir}")
-    os.makedirs(persist_dir, exist_ok=True)
-    index.storage_context.persist(persist_dir=persist_dir)
-    logger.info(f"LlamaIndex FAISS index persisted successfully to {persist_dir}.")
+    # --- Create and Save Metadata Map ---
+    logger.info(f"Creating metadata map...")
+    metadata_map = {}
+    for i, doc in enumerate(documents):
+        faiss_id = i # The sequential ID used in add_with_ids
+        metadata_map[str(faiss_id)] = {
+            "doc_id": doc.doc_id, # The meaningful ID (e.g., disease:avnrt:overview)
+            "text": doc.text, # Store the original text!
+            "metadata": doc.metadata # Store the LlamaIndex metadata dict
+        }
 
-# --- Main Execution (Simplified) ---
-if __name__ == "__main__":
-    logger.info("Starting FAISS index build process using LOCAL embeddings...")
+    logger.info(f"Saving metadata map to {metadata_path}...")
+    try:
+        with open(metadata_path, "w", encoding="utf-8") as f:
+             # Ensure_ascii=False is important for non-English chars if any
+            json.dump(metadata_map, f, indent=2, ensure_ascii=False)
+        logger.info("Metadata map saved successfully.")
+    except Exception as e:
+        logger.error(f"Failed to save metadata map: {e}", exc_info=True)
+        raise SystemExit("Metadata saving failed.")
 
-    # Load entities (These should contain the FAQs internally)
+
+# --- Main Execution ---
+if __name__ == "_main_":
+    logger.info("Starting FAISS index build process using LOCAL embeddings (Manual Save)...")
+
+    # Load entities
     diseases = load_json_data("mayo_all_structured.json", "disease", "disease_name")
-    tests = load_json_data("mayo_tests_all_structured.json", "test", "test_name") # Adjust name_field if needed
-    drugs = load_json_data("mayo_drugs_structured.json", "drug", "drug_name") # Adjust name_field if needed
-
-    # Combine ONLY the main entity lists
+    tests = load_json_data("mayo_tests_all_structured.json", "test", "test_name")
+    drugs = load_json_data("mayo_drugs_structured.json", "drug", "drug_name")
     all_entities = diseases + tests + drugs
     if not all_entities:
-         raise SystemExit("No entities loaded from primary JSON files. Check 'data' directory and filenames.")
+         raise SystemExit("No entities loaded.")
 
-    # Create LlamaIndex Documents (processes FAQs within entities)
+    # Create LlamaIndex Document objects
     documents = create_llama_documents(all_entities)
 
-    # Build and save
-    build_and_persist_llamaindex(documents)
+    # Build index and save manually
+    build_and_save_manual(documents)
 
-    logger.info("FAISS index build process completed.")
+    logger.info("FAISS index build process completed (Manual Save).")
