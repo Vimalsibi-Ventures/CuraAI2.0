@@ -7,6 +7,9 @@ import { AuthProvider } from "./contexts/AuthContext";
 import LoginPage from "./pages/LoginPage";
 import ChatPage from "./pages/ChatPage";
 import DoctorChatPage from "./pages/DoctorChatPage"; // 👈 create this file later
+import UserProfilePage from "./pages/UserProfilePage";
+
+
 
 function AppRoutes() {
   return (
@@ -22,6 +25,8 @@ function AppRoutes() {
 
       {/* Doctor chat page */}
       <Route path="/chat-doctor" element={<DoctorChatPage />} />
+      {/* User profile page */}
+      <Route path="/profile" element={<UserProfilePage />} />
     </Routes>
   );
 }
