@@ -1,38 +1,44 @@
+// frontend/src/contexts/AuthContext.js
+
 import React, { createContext, useState, useEffect } from 'react';
+import { loginUser, signupUser } from '../services/api';
 
 // ✅ Export AuthContext so it can be used in useAuth.js
 export const AuthContext = createContext();
 
 // AuthProvider component
 export const AuthProvider = ({ children }) => {
-  const [authToken, setAuthToken] = useState(localStorage.getItem('authToken') || null);
-  const [userId, setUserId] = useState(localStorage.getItem('userId') || null);
-  const [userRole, setUserRole] = useState(localStorage.getItem('userRole') || null);
+  const [authToken, setAuthToken] = useState(null);
+  const [userId, setUserId] = useState(null);
+  const [userRole, setUserRole] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // 🧠 Mock API responses (temporary)
-  const mockApi = (email, password, role = 'user') => {
-    return new Promise((resolve, reject) => {
-      setTimeout(() => {
-        if (!email || !password) reject(new Error('Missing credentials'));
-        else {
-          resolve({
-            token: 'mock-token-12345',
-            userId: 'mock-user-id',
-            role,
-          });
-        }
-      }, 800); // simulate API delay
-    });
-  };
+  // ✅ During development, clear any old tokens so LoginPage always shows first
+  useEffect(() => {
+    console.log('🧹 Clearing old auth data for development...');
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('userId');
+    localStorage.removeItem('userRole');
+  }, []);
 
-  // 🔐 Login function
+  // Load user info (used when backend is connected)
+  useEffect(() => {
+    const storedToken = localStorage.getItem('authToken');
+    const storedUserId = localStorage.getItem('userId');
+    const storedUserRole = localStorage.getItem('userRole');
+
+    if (storedToken) setAuthToken(storedToken);
+    if (storedUserId) setUserId(storedUserId);
+    if (storedUserRole) setUserRole(storedUserRole);
+  }, []);
+
+  // Login function (dummy placeholder)
   const login = async (email, password) => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await mockApi(email, password);
+      const data = await loginUser(email, password);
       const { token, userId, role } = data;
 
       localStorage.setItem('authToken', token);
@@ -44,18 +50,18 @@ export const AuthProvider = ({ children }) => {
       setUserRole(role);
     } catch (err) {
       console.error('Login failed:', err);
-      setError(err.message || 'Login failed. Please try again.');
+      setError(err.response?.data?.message || 'Login failed. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // 🧾 Signup function
+  // Signup function (dummy placeholder)
   const signup = async (email, password, role) => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await mockApi(email, password, role);
+      const data = await signupUser(email, password, role);
       const { token, userId, role: userRole } = data;
 
       localStorage.setItem('authToken', token);
@@ -67,13 +73,13 @@ export const AuthProvider = ({ children }) => {
       setUserRole(userRole);
     } catch (err) {
       console.error('Signup failed:', err);
-      setError(err.message || 'Signup failed. Please try again.');
+      setError(err.response?.data?.message || 'Signup failed. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // 🚪 Logout function
+  // Logout function
   const logout = () => {
     localStorage.removeItem('authToken');
     localStorage.removeItem('userId');
