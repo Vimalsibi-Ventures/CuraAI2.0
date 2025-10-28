@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom'
 function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  //const navigate = useNavigate()
+  const navigate = useNavigate()   // ✅ uncommented and used
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -16,34 +16,22 @@ function LoginPage() {
     <div className="login-container" style={{ maxWidth: '400px', margin: '50px auto', textAlign: 'center' }}>
       <h2>Login</h2>
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-        <div>
-          <label htmlFor="email">Email:</label><br />
-          <input
-            type="email"
-            id="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ccc' }}
-          />
-        </div>
-
-        <div>
-          <label htmlFor="password">Password:</label><br />
-          <input
-            type="password"
-            id="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ccc' }}
-          />
-        </div>
-
+        {/* ... existing form fields ... */}
         <button type="submit" style={{ padding: '10px', borderRadius: '6px', backgroundColor: '#007bff', color: '#fff', border: 'none' }}>
           Login
         </button>
       </form>
+
+      {/* ✅ Temporary navigation button */}
+      <button
+        onClick={() => {
+          localStorage.setItem('authToken', 'dummy-token')
+          navigate('/chat')
+        }}
+        style={{ marginTop: '20px', padding: '10px', borderRadius: '6px', backgroundColor: '#28a745', color: '#fff', border: 'none' }}
+      >
+        Go to Chat (Temp)
+      </button>
 
       <p style={{ marginTop: '15px' }}>
         Don't have an account?{' '}
