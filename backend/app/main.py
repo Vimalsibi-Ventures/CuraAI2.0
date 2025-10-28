@@ -53,4 +53,4 @@ if __name__ == '__main__':
     logger.info(f"Starting Flask development server on http://0.0.0.0:{port}")
     # debug=True enables auto-reloading and better error pages during development
     # Use debug=False for more production-like testing
-    app.run(host='0.0.0.0', port=port, debug=True)
+    app.run(host='0.0.0.0', port=port, debug=False)
